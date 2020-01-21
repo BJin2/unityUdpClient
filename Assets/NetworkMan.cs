@@ -10,12 +10,13 @@ public class NetworkMan : MonoBehaviour
 {
     public UdpClient udp;
     public GameObject playerPrefab;
-    private Dictionary<string, GameObject> players;
+    private Dictionary<string, GameObject> connectedPlayers;
+    
 
     // Start is called before the first frame update
     void Start()
     {
-        players = new Dictionary<string, GameObject>();
+        connectedPlayers = new Dictionary<string, GameObject>();
 
         udp = new UdpClient();
         
@@ -54,6 +55,7 @@ public class NetworkMan : MonoBehaviour
     public class Player
     {
         public string id;
+        [Serializable]
         public struct receivedColor
         {
             public float R;
@@ -73,6 +75,20 @@ public class NetworkMan : MonoBehaviour
     public class GameState
     {
         public Player[] players;
+
+        public override string ToString()
+        {
+            string result = "players\n";
+            foreach (var p in players)
+            {
+                result += "id : " + p.id + "\n";
+                result += "R : " + p.color.R.ToString() + ", ";
+                result += "G : " + p.color.G.ToString() + ", ";
+                result += "B : " + p.color.B.ToString();
+            }
+
+            return result;
+        }
     }
 
     public Message latestMessage;
@@ -93,27 +109,37 @@ public class NetworkMan : MonoBehaviour
         Debug.Log("Got this: " + returnData);
         
         latestMessage = JsonUtility.FromJson<Message>(returnData);
-        try{
+        try
+        {
             switch(latestMessage.cmd)
             {
                 case commands.NEW_CLIENT:
-                    SpawnPlayers();
+                    Debug.Log("New Client");
+                    lastestGameState = JsonUtility.FromJson<GameState>(returnData);
+                    Debug.Log(lastestGameState);
+                    Debug.Log(lastestGameState.ToString());
+                    //SpawnPlayers();
                     break;
                 case commands.UPDATE:
+                    Debug.Log("Update");
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
+                    Debug.Log(lastestGameState.players[0].color.R);
+                    Debug.Log(lastestGameState.ToString());
                     UpdatePlayers();
                     break;
                 case commands.CLIENT_DROPPED:
                     DestroyPlayers();
                     break;
                 case commands.CLIENT_LIST:
+                    //Does nothing
                     break;
                 default:
                     Debug.Log("Error");
                     break;
             }
         }
-        catch (Exception e){
+        catch (Exception e)
+        {
             Debug.Log(e.ToString());
         }
         
@@ -123,6 +149,11 @@ public class NetworkMan : MonoBehaviour
 
     void SpawnPlayers()
     {
+        Debug.Log("Spawn new player");
+        GameObject newPlayer = (GameObject)Instantiate(playerPrefab);
+        newPlayer.AddComponent<PlayerInfo>();
+        newPlayer.GetComponent<PlayerInfo>().SetNetworkID("");
+
         //int numPlayers = lastestGameState.players.Length;
         //Instantiate(playerPrefab, new Vector3(numPlayers, 0, 0), playerPrefab.transform.rotation);
         //Add to dictionary named players(NetworkMan class member dictionary). Key is id from received data
