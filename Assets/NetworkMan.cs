@@ -11,7 +11,7 @@ public class NetworkMan : MonoBehaviour
     public UdpClient udp;
     public GameObject playerPrefab;
     private Dictionary<string, GameObject> connectedPlayers;
-    private Queue<NewPlayer> newPlayers;
+    private Queue<string> newPlayers;
     
 
     // Start is called before the first frame update
@@ -19,7 +19,7 @@ public class NetworkMan : MonoBehaviour
     {
         connectedPlayers = new Dictionary<string, GameObject>();
         connectedPlayers.Clear();
-        newPlayers = new Queue<NewPlayer>();
+        newPlayers = new Queue<string>();
         newPlayers.Clear();
 
         udp = new UdpClient();
@@ -38,6 +38,8 @@ public class NetworkMan : MonoBehaviour
     void OnDestroy()
     {
         udp.Dispose();
+        connectedPlayers.Clear();
+        newPlayers.Clear();
     }
 
 
@@ -79,18 +81,31 @@ public class NetworkMan : MonoBehaviour
         }
     }
 
+    
+
     [Serializable]
     public class NewPlayer
     {
         [Serializable]
-        public struct Player
+        public class SingleClient
         {
             public string id;
-        };
-        public Player player;
+            public override string ToString()
+            {
+                return id;
+            }
+        }
+
+        public SingleClient[] player;
         public override string ToString()
         {
-            return player.id;
+            string result = "player : \n";
+            foreach (var p in player)
+            {
+                result += p.ToString() + "\n";
+            }
+
+            return result;
         }
     }
 
@@ -132,12 +147,13 @@ public class NetworkMan : MonoBehaviour
         {
             switch(latestMessage.cmd)
             {
+                
                 case commands.NEW_CLIENT:
                     Debug.Log("New Client");
                     NewPlayer newPlayer = JsonUtility.FromJson<NewPlayer>(returnData);
-                    newPlayers.Enqueue(newPlayer);
+                    foreach(var p in newPlayer.player)
+                        newPlayers.Enqueue(p.ToString());
                     Debug.Log(newPlayer.ToString());
-                    //SpawnPlayers();
                     break;
                 case commands.UPDATE:
                     Debug.Log("Update");
@@ -149,7 +165,11 @@ public class NetworkMan : MonoBehaviour
                     DestroyPlayers();
                     break;
                 case commands.CLIENT_LIST:
-                    //Does nothing
+                    Debug.Log("Client List");
+                    NewPlayer clientList = JsonUtility.FromJson<NewPlayer>(returnData);
+                    foreach (var p in clientList.player)
+                        newPlayers.Enqueue(p.ToString());
+                    Debug.Log(clientList.ToString());
                     break;
                 default:
                     Debug.Log("Error");
@@ -165,14 +185,22 @@ public class NetworkMan : MonoBehaviour
         socket.BeginReceive(new AsyncCallback(OnReceived), socket);
     }
 
-    void SpawnPlayers(NewPlayer newPlayer)
+    void SpawnPlayers(string networkID)
     {
+        if (connectedPlayers.ContainsKey(networkID))
+        {
+            Debug.Log("Already exists");
+            return;
+        }
         Debug.Log("Spawn new player");
-        string networkID = newPlayer.ToString();
+        //Spawn actual game object
         GameObject newPlayerGameObject = (GameObject)Instantiate(playerPrefab);
+
+        //Add network id
         newPlayerGameObject.AddComponent<PlayerInfo>();
         newPlayerGameObject.GetComponent<PlayerInfo>().SetNetworkID(networkID);
         connectedPlayers.Add(networkID, newPlayerGameObject);
+        Debug.Log("Spawned " + networkID);
     }
 
     void UpdatePlayers()
@@ -197,7 +225,7 @@ public class NetworkMan : MonoBehaviour
         {
             for (int i = 0; i < newPlayers.Count; i++)
             {
-                NewPlayer newPlayer = newPlayers.Dequeue();
+                string newPlayer = newPlayers.Dequeue();
                 SpawnPlayers(newPlayer);
             }
         }
