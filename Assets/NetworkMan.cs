@@ -11,12 +11,16 @@ public class NetworkMan : MonoBehaviour
     public UdpClient udp;
     public GameObject playerPrefab;
     private Dictionary<string, GameObject> connectedPlayers;
+    private Queue<NewPlayer> newPlayers;
     
 
     // Start is called before the first frame update
     void Start()
     {
         connectedPlayers = new Dictionary<string, GameObject>();
+        connectedPlayers.Clear();
+        newPlayers = new Queue<NewPlayer>();
+        newPlayers.Clear();
 
         udp = new UdpClient();
         
@@ -62,13 +66,32 @@ public class NetworkMan : MonoBehaviour
             public float G;
             public float B;
         }
-        public receivedColor color;        
+        public receivedColor color;
+        public override string ToString()
+        {
+            string result = "Player : \n";
+            result += "id : " + id + "\n";
+            result += "R : " + color.R.ToString() + ", ";
+            result += "G : " + color.G.ToString() + ", ";
+            result += "B : " + color.B.ToString() + "\n";
+
+            return result;
+        }
     }
 
     [Serializable]
     public class NewPlayer
     {
-        
+        [Serializable]
+        public struct Player
+        {
+            public string id;
+        };
+        public Player player;
+        public override string ToString()
+        {
+            return player.id;
+        }
     }
 
     [Serializable]
@@ -78,15 +101,11 @@ public class NetworkMan : MonoBehaviour
 
         public override string ToString()
         {
-            string result = "players\n";
+            string result = "players : \n";
             foreach (var p in players)
             {
-                result += "id : " + p.id + "\n";
-                result += "R : " + p.color.R.ToString() + ", ";
-                result += "G : " + p.color.G.ToString() + ", ";
-                result += "B : " + p.color.B.ToString();
+                result += p.ToString();
             }
-
             return result;
         }
     }
@@ -115,15 +134,14 @@ public class NetworkMan : MonoBehaviour
             {
                 case commands.NEW_CLIENT:
                     Debug.Log("New Client");
-                    lastestGameState = JsonUtility.FromJson<GameState>(returnData);
-                    Debug.Log(lastestGameState);
-                    Debug.Log(lastestGameState.ToString());
+                    NewPlayer newPlayer = JsonUtility.FromJson<NewPlayer>(returnData);
+                    newPlayers.Enqueue(newPlayer);
+                    Debug.Log(newPlayer.ToString());
                     //SpawnPlayers();
                     break;
                 case commands.UPDATE:
                     Debug.Log("Update");
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
-                    Debug.Log(lastestGameState.players[0].color.R);
                     Debug.Log(lastestGameState.ToString());
                     UpdatePlayers();
                     break;
@@ -147,16 +165,14 @@ public class NetworkMan : MonoBehaviour
         socket.BeginReceive(new AsyncCallback(OnReceived), socket);
     }
 
-    void SpawnPlayers()
+    void SpawnPlayers(NewPlayer newPlayer)
     {
         Debug.Log("Spawn new player");
-        GameObject newPlayer = (GameObject)Instantiate(playerPrefab);
-        newPlayer.AddComponent<PlayerInfo>();
-        newPlayer.GetComponent<PlayerInfo>().SetNetworkID("");
-
-        //int numPlayers = lastestGameState.players.Length;
-        //Instantiate(playerPrefab, new Vector3(numPlayers, 0, 0), playerPrefab.transform.rotation);
-        //Add to dictionary named players(NetworkMan class member dictionary). Key is id from received data
+        string networkID = newPlayer.ToString();
+        GameObject newPlayerGameObject = (GameObject)Instantiate(playerPrefab);
+        newPlayerGameObject.AddComponent<PlayerInfo>();
+        newPlayerGameObject.GetComponent<PlayerInfo>().SetNetworkID(networkID);
+        connectedPlayers.Add(networkID, newPlayerGameObject);
     }
 
     void UpdatePlayers()
@@ -173,5 +189,17 @@ public class NetworkMan : MonoBehaviour
     {
         Byte[] sendBytes = Encoding.ASCII.GetBytes("heartbeat");
         udp.Send(sendBytes, sendBytes.Length);
+    }
+
+    private void Update()
+    {
+        if (newPlayers.Count > 0)
+        {
+            for (int i = 0; i < newPlayers.Count; i++)
+            {
+                NewPlayer newPlayer = newPlayers.Dequeue();
+                SpawnPlayers(newPlayer);
+            }
+        }
     }
 }
