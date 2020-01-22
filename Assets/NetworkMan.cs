@@ -13,7 +13,6 @@ public class NetworkMan : MonoBehaviour
     private Dictionary<string, GameObject> connectedPlayers;
     private Queue<string> newPlayers;
     
-
     // Start is called before the first frame update
     void Start()
     {
@@ -41,7 +40,6 @@ public class NetworkMan : MonoBehaviour
         connectedPlayers.Clear();
         newPlayers.Clear();
     }
-
 
     public enum commands
     {
@@ -145,7 +143,6 @@ public class NetworkMan : MonoBehaviour
         {
             switch(latestMessage.cmd)
             {
-                
                 case commands.NEW_CLIENT:
                     Debug.Log("New Client");
                     NewPlayer newPlayer = JsonUtility.FromJson<NewPlayer>(returnData);
@@ -201,6 +198,20 @@ public class NetworkMan : MonoBehaviour
         Debug.Log("Spawned " + networkID);
     }
 
+    void RelocatePlayers()
+    {
+        if (connectedPlayers.Count > 1)
+        {
+            int count = 0;
+            int startX = (connectedPlayers.Count / 2) * -1;
+            foreach (var p in connectedPlayers)
+            {
+                p.Value.transform.position = new Vector3(startX + count, 0, 0);
+                count++;
+            }
+        }
+    }
+
     void UpdatePlayers()
     {
         int numPlayer = connectedPlayers.Count;
@@ -214,6 +225,7 @@ public class NetworkMan : MonoBehaviour
             Debug.Log("Some player is not destroyed");
         }
 
+        int startX = (numPlayer / 2) * -1;
         for (int i = 0; i < numPlayer; i++)
         {
             
@@ -231,6 +243,9 @@ public class NetworkMan : MonoBehaviour
             Color newColor = new Color(p.color.R, p.color.G, p.color.B);
             player.GetComponent<Renderer>().material.SetColor("_Color", newColor);
             Debug.Log("Changed color" + p.id);
+
+            //Repositioning players
+            player.transform.position = new Vector3(startX + i, 0, 0);
         }
     }
 
