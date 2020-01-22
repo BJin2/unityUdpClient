@@ -12,6 +12,7 @@ public class NetworkMan : MonoBehaviour
     public GameObject playerPrefab;
     private Dictionary<string, GameObject> connectedPlayers;
     private Queue<string> newPlayers;
+    private bool clientDropped;
     
     // Start is called before the first frame update
     void Start()
@@ -20,6 +21,7 @@ public class NetworkMan : MonoBehaviour
         connectedPlayers.Clear();
         newPlayers = new Queue<string>();
         newPlayers.Clear();
+        clientDropped = false;
 
         udp = new UdpClient();
         
@@ -154,10 +156,14 @@ public class NetworkMan : MonoBehaviour
                     Debug.Log("Update");
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
                     Debug.Log(lastestGameState.ToString());
-                    
                     break;
                 case commands.CLIENT_DROPPED:
-                    DestroyPlayers();
+                    Debug.Log("Client Dropped");
+                    NewPlayer dropped = JsonUtility.FromJson<NewPlayer>(returnData);
+                    foreach (var p in dropped.player)
+                        connectedPlayers.Remove(p.id);
+                    Debug.Log(dropped);
+                    clientDropped = true;
                     break;
                 case commands.CLIENT_LIST:
                     Debug.Log("Client List");
@@ -222,6 +228,7 @@ public class NetworkMan : MonoBehaviour
         else if (numPlayer > lastestGameState.players.Length)
         {
             numPlayer = lastestGameState.players.Length;
+            clientDropped = true;
             Debug.Log("Some player is not destroyed");
         }
 
@@ -233,7 +240,8 @@ public class NetworkMan : MonoBehaviour
 
             if (!connectedPlayers.ContainsKey(p.id))
             {
-                Debug.Log(p.id + " not spawned yet");
+                Debug.Log(p.id + " not spawned or not destroyed yet");
+                clientDropped = true;
                 continue;
             }
 
@@ -251,7 +259,14 @@ public class NetworkMan : MonoBehaviour
 
     void DestroyPlayers()
     {
-
+        PlayerInfo[] infos = GameObject.FindObjectsOfType<PlayerInfo>();
+        for (int i = 0; i < infos.Length; i++)
+        {
+            if (!connectedPlayers.ContainsKey(infos[i].Network_ID))
+            {
+                Destroy(infos[i].gameObject);
+            }
+        }
     }
     
     void HeartBeat()
@@ -271,5 +286,10 @@ public class NetworkMan : MonoBehaviour
             }
         }
         UpdatePlayers();
+        if (clientDropped)
+        {
+            DestroyPlayers();
+            clientDropped = false;
+        }
     }
 }
