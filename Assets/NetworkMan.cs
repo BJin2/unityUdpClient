@@ -81,8 +81,6 @@ public class NetworkMan : MonoBehaviour
         }
     }
 
-    
-
     [Serializable]
     public class NewPlayer
     {
@@ -159,7 +157,7 @@ public class NetworkMan : MonoBehaviour
                     Debug.Log("Update");
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
                     Debug.Log(lastestGameState.ToString());
-                    UpdatePlayers();
+                    
                     break;
                 case commands.CLIENT_DROPPED:
                     DestroyPlayers();
@@ -205,7 +203,35 @@ public class NetworkMan : MonoBehaviour
 
     void UpdatePlayers()
     {
-        //find player gameobject using id for lastestGameState
+        int numPlayer = connectedPlayers.Count;
+        if (numPlayer < lastestGameState.players.Length)
+        {
+            Debug.Log("Some player is not spawned yet");
+        }
+        else if (numPlayer > lastestGameState.players.Length)
+        {
+            numPlayer = lastestGameState.players.Length;
+            Debug.Log("Some player is not destroyed");
+        }
+
+        for (int i = 0; i < numPlayer; i++)
+        {
+            
+            Player p = lastestGameState.players[i];
+
+            if (!connectedPlayers.ContainsKey(p.id))
+            {
+                Debug.Log(p.id + " not spawned yet");
+                continue;
+            }
+
+            //player existance is guaranteed
+            Debug.Log("Changing color " + p.id);
+            GameObject player = connectedPlayers[p.id];
+            Color newColor = new Color(p.color.R, p.color.G, p.color.B);
+            player.GetComponent<Renderer>().material.SetColor("_Color", newColor);
+            Debug.Log("Changed color" + p.id);
+        }
     }
 
     void DestroyPlayers()
@@ -229,5 +255,6 @@ public class NetworkMan : MonoBehaviour
                 SpawnPlayers(newPlayer);
             }
         }
+        UpdatePlayers();
     }
 }
