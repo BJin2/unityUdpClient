@@ -84,17 +84,7 @@ public class NetworkMan : MonoBehaviour
     [Serializable]
     public class NewPlayer
     {
-        [Serializable]
-        public class SingleClient
-        {
-            public string id;
-            public override string ToString()
-            {
-                return id;
-            }
-        }
-
-        public SingleClient[] player;
+        public Player[] player;
         public override string ToString()
         {
             string result = "player : \n";
@@ -149,28 +139,28 @@ public class NetworkMan : MonoBehaviour
                     Debug.Log("New Client");
                     NewPlayer newPlayer = JsonUtility.FromJson<NewPlayer>(returnData);
                     foreach(var p in newPlayer.player)
-                        newPlayers.Enqueue(p.ToString());
-                    Debug.Log(newPlayer.ToString());
+                        newPlayers.Enqueue(p.id);
+                    //Debug.Log(newPlayer.ToString());
                     break;
                 case commands.UPDATE:
                     Debug.Log("Update");
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
-                    Debug.Log(lastestGameState.ToString());
+                    //Debug.Log(lastestGameState.ToString());
                     break;
                 case commands.CLIENT_DROPPED:
                     Debug.Log("Client Dropped");
                     NewPlayer dropped = JsonUtility.FromJson<NewPlayer>(returnData);
                     foreach (var p in dropped.player)
                         connectedPlayers.Remove(p.id);
-                    Debug.Log(dropped);
+                    //Debug.Log(dropped);
                     clientDropped = true;
                     break;
                 case commands.CLIENT_LIST:
                     Debug.Log("Client List");
                     NewPlayer clientList = JsonUtility.FromJson<NewPlayer>(returnData);
                     foreach (var p in clientList.player)
-                        newPlayers.Enqueue(p.ToString());
-                    Debug.Log(clientList.ToString());
+                        newPlayers.Enqueue(p.id);
+                    //Debug.Log(clientList.ToString());
                     break;
                 default:
                     Debug.Log("Error");
@@ -193,7 +183,7 @@ public class NetworkMan : MonoBehaviour
             Debug.Log("Already exists");
             return;
         }
-        Debug.Log("Spawn new player");
+        //Debug.Log("Spawn new player");
         //Spawn actual game object
         GameObject newPlayerGameObject = (GameObject)Instantiate(playerPrefab);
 
@@ -201,7 +191,7 @@ public class NetworkMan : MonoBehaviour
         newPlayerGameObject.AddComponent<PlayerInfo>();
         newPlayerGameObject.GetComponent<PlayerInfo>().SetNetworkID(networkID);
         connectedPlayers.Add(networkID, newPlayerGameObject);
-        Debug.Log("Spawned " + networkID);
+        //Debug.Log("Spawned " + networkID);
     }
 
     void RelocatePlayers()
@@ -246,11 +236,11 @@ public class NetworkMan : MonoBehaviour
             }
 
             //player existance is guaranteed
-            Debug.Log("Changing color " + p.id);
+            //Debug.Log("Changing color " + p.id);
             GameObject player = connectedPlayers[p.id];
             Color newColor = new Color(p.color.R, p.color.G, p.color.B);
             player.GetComponent<Renderer>().material.SetColor("_Color", newColor);
-            Debug.Log("Changed color" + p.id);
+            //Debug.Log("Changed color" + p.id);
 
             //Repositioning players
             player.transform.position = new Vector3(startX + i, 0, 0);
