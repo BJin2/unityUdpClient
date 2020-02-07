@@ -10,22 +10,27 @@ public class NetworkMan : MonoBehaviour
 {
     public UdpClient udp;
     public GameObject playerPrefab;
+    private string ownID;
+
     private Dictionary<string, GameObject> connectedPlayers;
-    private Queue<string> newPlayers;
-    private bool clientDropped;
-    
+    private Queue<NetworkMessage.Player> newPlayers;
+    private Queue<string> disconnectedPlayers;
+
+    public NetworkMessage.UpdatedPlayer latestUpdates;
+
     // Start is called before the first frame update
     void Start()
     {
         connectedPlayers = new Dictionary<string, GameObject>();
         connectedPlayers.Clear();
-        newPlayers = new Queue<string>();
+        newPlayers = new Queue<NetworkMessage.Player>();
         newPlayers.Clear();
-        clientDropped = false;
+        disconnectedPlayers = new Queue<string>();
+        disconnectedPlayers.Clear();
 
         udp = new UdpClient();
         
-        udp.Connect("54.90.62.70", 12345);
+        udp.Connect("3.209.132.25", 12345);
 
         Byte[] sendBytes = Encoding.ASCII.GetBytes("connect");
       
@@ -40,81 +45,10 @@ public class NetworkMan : MonoBehaviour
     {
         udp.Dispose();
         connectedPlayers.Clear();
+        disconnectedPlayers.Clear();
         newPlayers.Clear();
     }
 
-    public enum commands
-    {
-        NEW_CLIENT,
-        UPDATE,
-        CLIENT_DROPPED,
-        CLIENT_LIST
-    };
-    
-    [Serializable]
-    public class Message
-    {
-        public commands cmd;
-    }
-    
-    [Serializable]
-    public class Player
-    {
-        public string id;
-        [Serializable]
-        public struct receivedColor
-        {
-            public float R;
-            public float G;
-            public float B;
-        }
-        public receivedColor color;
-        public override string ToString()
-        {
-            string result = "Player : \n";
-            result += "id : " + id + "\n";
-            result += "R : " + color.R.ToString() + ", ";
-            result += "G : " + color.G.ToString() + ", ";
-            result += "B : " + color.B.ToString() + "\n";
-
-            return result;
-        }
-    }
-
-    [Serializable]
-    public class NewPlayer
-    {
-        public Player[] player;
-        public override string ToString()
-        {
-            string result = "player : \n";
-            foreach (var p in player)
-            {
-                result += p.ToString() + "\n";
-            }
-
-            return result;
-        }
-    }
-
-    [Serializable]
-    public class GameState
-    {
-        public Player[] players;
-
-        public override string ToString()
-        {
-            string result = "players : \n";
-            foreach (var p in players)
-            {
-                result += p.ToString();
-            }
-            return result;
-        }
-    }
-
-    public Message latestMessage;
-    public GameState lastestGameState;
     void OnReceived(IAsyncResult result)
     {
         // this is what had been passed into BeginReceive as the second parameter:
@@ -129,38 +63,42 @@ public class NetworkMan : MonoBehaviour
         // do what you'd like with `message` here:
         string returnData = Encoding.ASCII.GetString(message);
         Debug.Log("Got this: " + returnData);
-        
-        latestMessage = JsonUtility.FromJson<Message>(returnData);
+
+        NetworkMessage.State latestState = JsonUtility.FromJson<NetworkMessage.State>(returnData);
         try
         {
-            switch(latestMessage.cmd)
+            switch(latestState.cmd)
             {
-                case commands.NEW_CLIENT:
+                case NetworkMessage.Commands.NEW_CLIENT:
                     Debug.Log("New Client");
-                    NewPlayer newPlayer = JsonUtility.FromJson<NewPlayer>(returnData);
-                    foreach(var p in newPlayer.player)
-                        newPlayers.Enqueue(p.id);
-                    //Debug.Log(newPlayer.ToString());
+                    NetworkMessage.NewPlayer newPlayer = JsonUtility.FromJson<NetworkMessage.NewPlayer>(returnData);
+                    newPlayers.Enqueue(newPlayer.player);
                     break;
-                case commands.UPDATE:
+                case NetworkMessage.Commands.UPDATE:
                     Debug.Log("Update");
-                    lastestGameState = JsonUtility.FromJson<GameState>(returnData);
-                    //Debug.Log(lastestGameState.ToString());
+                    latestUpdates = JsonUtility.FromJson<NetworkMessage.UpdatedPlayer>(returnData);
                     break;
-                case commands.CLIENT_DROPPED:
+                case NetworkMessage.Commands.CLIENT_DROPPED:
                     Debug.Log("Client Dropped");
-                    NewPlayer dropped = JsonUtility.FromJson<NewPlayer>(returnData);
-                    foreach (var p in dropped.player)
-                        connectedPlayers.Remove(p.id);
-                    //Debug.Log(dropped);
-                    clientDropped = true;
+                    NetworkMessage.DisconnectedPlayer dropped = JsonUtility.FromJson<NetworkMessage.DisconnectedPlayer>(returnData);
+                    foreach (var p in dropped.players)
+                        disconnectedPlayers.Enqueue(p.id);
                     break;
-                case commands.CLIENT_LIST:
+                case NetworkMessage.Commands.CLIENT_LIST:
                     Debug.Log("Client List");
-                    NewPlayer clientList = JsonUtility.FromJson<NewPlayer>(returnData);
-                    foreach (var p in clientList.player)
-                        newPlayers.Enqueue(p.id);
-                    //Debug.Log(clientList.ToString());
+
+                    NetworkMessage.ConnectedPlayer clientList = JsonUtility.FromJson<NetworkMessage.ConnectedPlayer>(returnData);
+                    if (clientList.players.Length > 0)
+                    {
+                        foreach (var p in clientList.players)
+                            newPlayers.Enqueue(p);
+                    }
+                    break;
+                case NetworkMessage.Commands.OWN_ID:
+                    Debug.Log("Connected");
+                    NetworkMessage.NewPlayer player = JsonUtility.FromJson<NetworkMessage.NewPlayer>(returnData);
+                    ownID = player.player.id;
+                    newPlayers.Enqueue(player.player);
                     break;
                 default:
                     Debug.Log("Error");
@@ -176,92 +114,68 @@ public class NetworkMan : MonoBehaviour
         socket.BeginReceive(new AsyncCallback(OnReceived), socket);
     }
 
-    void SpawnPlayers(string networkID)
+    void SpawnPlayers(NetworkMessage.Player player)
     {
-        if (connectedPlayers.ContainsKey(networkID))
+        if (connectedPlayers.ContainsKey(player.id))
         {
             Debug.Log("Already exists");
             return;
         }
-        //Debug.Log("Spawn new player");
+
         //Spawn actual game object
-        GameObject newPlayerGameObject = (GameObject)Instantiate(playerPrefab);
+        GameObject newPlayerGameObject = Instantiate(playerPrefab);
+
+        //Every players will have different color from the server
+        Color newColor = new Color(player.color.R, player.color.G, player.color.B);
+        newPlayerGameObject.GetComponent<Renderer>().material.SetColor("_Color", newColor);
 
         //Add network id
-        newPlayerGameObject.AddComponent<PlayerInfo>();
-        newPlayerGameObject.GetComponent<PlayerInfo>().SetNetworkID(networkID);
-        connectedPlayers.Add(networkID, newPlayerGameObject);
-        //Debug.Log("Spawned " + networkID);
-    }
-
-    void RelocatePlayers()
-    {
-        if (connectedPlayers.Count > 1)
-        {
-            int count = 0;
-            int startX = (connectedPlayers.Count / 2) * -1;
-            foreach (var p in connectedPlayers)
-            {
-                p.Value.transform.position = new Vector3(startX + count, 0, 0);
-                count++;
-            }
-        }
+        NetworkCharacter character = newPlayerGameObject.GetComponent<NetworkCharacter>();
+        character.SetNetMan(this);
+        character.SetNetworkID(player.id);
+        character.SetControllable(player.id == ownID);
+        connectedPlayers.Add(player.id, newPlayerGameObject);
     }
 
     void UpdatePlayers()
     {
-        int numPlayer = connectedPlayers.Count;
-        if (numPlayer < lastestGameState.players.Length)
+        for (int i = 0; i < connectedPlayers.Count; i++)
         {
-            Debug.Log("Some player is not spawned yet");
-        }
-        else if (numPlayer > lastestGameState.players.Length)
-        {
-            numPlayer = lastestGameState.players.Length;
-            clientDropped = true;
-            Debug.Log("Some player is not destroyed");
-        }
+            if (latestUpdates.players.Length <= 0)
+                return;
 
-        int startX = (numPlayer / 2) * -1;
-        for (int i = 0; i < numPlayer; i++)
-        {
-            
-            Player p = lastestGameState.players[i];
-
-            if (!connectedPlayers.ContainsKey(p.id))
-            {
-                Debug.Log(p.id + " not spawned or not destroyed yet");
-                clientDropped = true;
+            if (i >= latestUpdates.players.Length)
+                return;
+            NetworkMessage.Player p = latestUpdates.players[i];
+            if (p.id == ownID || !connectedPlayers.ContainsKey(p.id))
                 continue;
-            }
 
-            //player existance is guaranteed
-            //Debug.Log("Changing color " + p.id);
             GameObject player = connectedPlayers[p.id];
-            Color newColor = new Color(p.color.R, p.color.G, p.color.B);
-            player.GetComponent<Renderer>().material.SetColor("_Color", newColor);
-            //Debug.Log("Changed color" + p.id);
-
-            //Repositioning players
-            player.transform.position = new Vector3(startX + i, 0, 0);
+            player.transform.position = p.position;
+            player.transform.rotation = p.rotation;
         }
     }
 
-    void DestroyPlayers()
+    void DestroyPlayers(string networkID)
     {
-        PlayerInfo[] infos = GameObject.FindObjectsOfType<PlayerInfo>();
-        for (int i = 0; i < infos.Length; i++)
-        {
-            if (!connectedPlayers.ContainsKey(infos[i].Network_ID))
-            {
-                Destroy(infos[i].gameObject);
-            }
-        }
+        Debug.Log("Destroyed player");
+        Destroy(connectedPlayers[networkID]);
+        connectedPlayers.Remove(networkID);
     }
     
     void HeartBeat()
     {
         Byte[] sendBytes = Encoding.ASCII.GetBytes("heartbeat");
+        udp.Send(sendBytes, sendBytes.Length);
+    }
+    public void SendTransform(Transform t, string id)
+    {
+        NetworkMessage.PlayerData p = new NetworkMessage.PlayerData();
+        p.position = t.position;
+        p.rotation = t.rotation;
+        string jsonString = JsonUtility.ToJson(p);
+        Debug.Log(jsonString);
+        Byte[] sendBytes = Encoding.ASCII.GetBytes(jsonString);
         udp.Send(sendBytes, sendBytes.Length);
     }
 
@@ -271,15 +185,18 @@ public class NetworkMan : MonoBehaviour
         {
             for (int i = 0; i < newPlayers.Count; i++)
             {
-                string newPlayer = newPlayers.Dequeue();
+                NetworkMessage.Player newPlayer = newPlayers.Dequeue();
                 SpawnPlayers(newPlayer);
             }
         }
-        UpdatePlayers();
-        if (clientDropped)
+        if (disconnectedPlayers.Count > 0)
         {
-            DestroyPlayers();
-            clientDropped = false;
+            for (int i = 0; i < disconnectedPlayers.Count; i++)
+            {
+                string diconnectedPlayerID = disconnectedPlayers.Dequeue();
+                DestroyPlayers(diconnectedPlayerID);
+            }
         }
+        UpdatePlayers();
     }
 }
