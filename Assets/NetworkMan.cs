@@ -147,7 +147,7 @@ public class NetworkMan : MonoBehaviour
             if (i >= latestUpdates.players.Length)
                 return;
             NetworkMessage.Player p = latestUpdates.players[i];
-            if (p.id == ownID || !connectedPlayers.ContainsKey(p.id))
+            if (!connectedPlayers.ContainsKey(p.id))
                 continue;
 
             GameObject player = connectedPlayers[p.id];
@@ -170,9 +170,13 @@ public class NetworkMan : MonoBehaviour
     }
     public void SendTransform(Transform t, string id)
     {
+        SendTransform(t.position, t.rotation, id);
+    }
+    public void SendTransform(Vector3 position, Quaternion rotation, string id)
+    {
         NetworkMessage.PlayerData p = new NetworkMessage.PlayerData();
-        p.position = t.position;
-        p.rotation = t.rotation;
+        p.position = position;
+        p.rotation = rotation;
         string jsonString = JsonUtility.ToJson(p);
         Debug.Log(jsonString);
         Byte[] sendBytes = Encoding.ASCII.GetBytes(jsonString);

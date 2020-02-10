@@ -7,11 +7,16 @@ public class NetworkCharacter : MonoBehaviour
 	public NetworkMan netMan;
 	public string network_id { get; private set; }
 	public bool controllable { get; private set; }
+	private Vector3 position;
+	private Vector3 euler;
+	private Quaternion rotation;
 
 	private void Start()
 	{
 		if(controllable)
 			InvokeRepeating("NetUpdateTransform", 1,0.03f);
+		position = transform.position;
+		rotation = transform.rotation;
 	}
 	private void Update()
 	{
@@ -24,19 +29,25 @@ public class NetworkCharacter : MonoBehaviour
 
 		if (Input.GetKey(KeyCode.W))
 		{
-			transform.Translate(Vector3.forward * Time.deltaTime);
+			position += transform.TransformDirection(Vector3.forward) * Time.deltaTime;
+			//transform.Translate(Vector3.forward * Time.deltaTime);
 		}
 		if (Input.GetKey(KeyCode.S))
 		{
-			transform.Translate(-Vector3.forward * Time.deltaTime);
+			position += transform.TransformDirection(Vector3.back) * Time.deltaTime;
+			//transform.Translate(-Vector3.forward * Time.deltaTime);
 		}
 		if (Input.GetKey(KeyCode.D))
 		{
-			transform.Rotate(Vector3.up * Time.deltaTime * 90);
+			euler += Vector3.up * Time.deltaTime * 90;
+			rotation = Quaternion.Euler(euler);
+			//transform.Rotate(Vector3.up * Time.deltaTime * 90);
 		}
 		if (Input.GetKey(KeyCode.A))
 		{
-			transform.Rotate(-Vector3.up * Time.deltaTime * 90);
+			euler += Vector3.down * Time.deltaTime * 90;
+			rotation = Quaternion.Euler(euler);
+			//transform.Rotate(-Vector3.up * Time.deltaTime * 90);
 		}
 	}
 	public void SetNetMan(NetworkMan netman)
@@ -54,6 +65,6 @@ public class NetworkCharacter : MonoBehaviour
 
 	public void NetUpdateTransform()
 	{
-		netMan.SendTransform(transform, network_id);
+		netMan.SendTransform(position, rotation, network_id);
 	}
 }
